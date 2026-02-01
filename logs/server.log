@@ -1,4 +1,6 @@
-﻿INFO boot
-INFO ready
-WARN memory high
+INFO  server boot
+INFO  listening on :8080
+WARN  memory high
+INFO  gc triggered
 ERROR crash detected
+INFO  restarting server

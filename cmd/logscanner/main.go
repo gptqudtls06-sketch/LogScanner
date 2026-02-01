@@ -42,7 +42,7 @@ func main() {
 		*tail = 20
 	}
 
-	updates := analyzer.Start(files, re, *concurrent)
+	updates, pauseFn := analyzer.Start(files, re, *concurrent)
 
 	cfg := tui.Config{
 		PathPattern: *path,
@@ -51,7 +51,7 @@ func main() {
 		TailMax:     *tail,
 	}
 
-	if err := tui.Run(files, updates, cfg); err != nil {
+	if err := tui.Run(files, updates, cfg, pauseFn); err != nil {
 		fmt.Fprintln(os.Stderr, "TUI 실행 실패:", err)
 		os.Exit(1)
 	}

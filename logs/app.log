@@ -1,3 +1,6 @@
-INFO start
+INFO  app started
+WARN  slow query detected
+INFO  cache warmed
 ERROR database failed
-WARN slow query
+INFO  retrying connection
+WARN  slow query again

@@ -1,9 +1,6 @@
 package analyzer
 
-// Event는 analyzer -> tui 로 전달되는 이벤트의 공통 타입입니다.
-type Event interface {
-	isEvent()
-}
+type Event interface{ isEvent() }
 
 type Totals struct {
 	FilesTotal   int
@@ -27,6 +24,7 @@ type FileUpdate struct {
 func (FileUpdate) isEvent() {}
 
 type MatchLine struct {
+	Seq  uint64
 	File string
 	Line string
 }

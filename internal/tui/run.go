@@ -6,9 +6,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func Run(files []string, updates <-chan analyzer.Event, cfg Config) error {
-	m := initialModel(files, updates, cfg)
-	p := tea.NewProgram(m) // Windows/VSCode에서 안정적으로 AltScreen OFF
+func Run(files []string, updates <-chan analyzer.Event, cfg Config, pauseFn func(bool)) error {
+	m := initialModel(files, updates, cfg, pauseFn)
+	p := tea.NewProgram(m) // AltScreen OFF (윈도우 안정)
 	_, err := p.Run()
 	return err
 }

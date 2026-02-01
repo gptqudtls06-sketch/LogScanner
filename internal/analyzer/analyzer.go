@@ -9,12 +9,48 @@ import (
 	"time"
 )
 
-// Start: 파일 단위 병렬 스캔(워커풀) +
-// - 파일별 결과(FileUpdate)
-// - 전체 totals(Totals) 주기 전송
-// - 매칭 라인(MatchLine) 전송
-func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
+type PauseController struct {
+	paused int32
+	chMu   sync.Mutex
+	ch     chan struct{} // resume 시 close
+}
+
+func NewPauseController() *PauseController {
+	return &PauseController{ch: make(chan struct{})}
+}
+
+func (p *PauseController) SetPaused(v bool) {
+	if v {
+		atomic.StoreInt32(&p.paused, 1)
+		return
+	}
+	atomic.StoreInt32(&p.paused, 0)
+
+	p.chMu.Lock()
+	select {
+	case <-p.ch:
+	default:
+		close(p.ch)
+	}
+	p.ch = make(chan struct{})
+	p.chMu.Unlock()
+}
+
+func (p *PauseController) WaitIfPaused() {
+	if atomic.LoadInt32(&p.paused) == 0 {
+		return
+	}
+	p.chMu.Lock()
+	ch := p.ch
+	p.chMu.Unlock()
+	<-ch
+}
+
+// Start: 워커풀 + Totals ticker(select로 종료) + MatchLine Seq 보장 + pauseFn 반환
+func Start(files []string, re *regexp.Regexp, concurrent int) (<-chan Event, func(bool)) {
 	out := make(chan Event, 256)
+	pc := NewPauseController()
+	pauseFn := func(paused bool) { pc.SetPaused(paused) }
 
 	go func() {
 		defer close(out)
@@ -22,12 +58,12 @@ func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
 		var filesDone int64
 		var linesTotal int64
 		var matchesTotal int64
+		var seq uint64
 
-		// 초기 totals 1회
+		// 초기 totals
 		out <- Totals{FilesTotal: len(files)}
 
 		jobs := make(chan string)
-
 		var wg sync.WaitGroup
 		wg.Add(concurrent)
 
@@ -35,23 +71,13 @@ func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
 			go func() {
 				defer wg.Done()
 				for path := range jobs {
-					lines, matches, err := scanFileOnce(path, re, out)
+					pc.WaitIfPaused()
+
+					lines, matches, err := scanFileOnce(path, re, out, pc, &seq)
 					if err != nil {
-						out <- FileUpdate{
-							File:    path,
-							Lines:   lines,
-							Matches: matches,
-							Status:  "FAIL",
-							Err:     err,
-						}
+						out <- FileUpdate{File: path, Lines: lines, Matches: matches, Status: "FAIL", Err: err}
 					} else {
-						out <- FileUpdate{
-							File:    path,
-							Lines:   lines,
-							Matches: matches,
-							Status:  "DONE",
-							Err:     nil,
-						}
+						out <- FileUpdate{File: path, Lines: lines, Matches: matches, Status: "DONE", Err: nil}
 						atomic.AddInt64(&linesTotal, lines)
 						atomic.AddInt64(&matchesTotal, matches)
 					}
@@ -60,15 +86,14 @@ func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
 			}()
 		}
 
-		// job feed
 		go func() {
 			for _, f := range files {
+				out <- FileUpdate{File: f, Status: "WAIT"}
 				jobs <- f
 			}
 			close(jobs)
 		}()
 
-		// totals ticker
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 
@@ -87,7 +112,6 @@ func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
 					LinesTotal:   atomic.LoadInt64(&linesTotal),
 					MatchesTotal: atomic.LoadInt64(&matchesTotal),
 				}
-
 			case <-done:
 				out <- Totals{
 					FilesTotal:   len(files),
@@ -101,11 +125,10 @@ func Start(files []string, re *regexp.Regexp, concurrent int) <-chan Event {
 		}
 	}()
 
-	return out
+	return out, pauseFn
 }
 
-// 파일을 한 번만 읽고(lines+matches), 매칭 라인은 out으로 전송
-func scanFileOnce(path string, re *regexp.Regexp, out chan<- Event) (int64, int64, error) {
+func scanFileOnce(path string, re *regexp.Regexp, out chan<- Event, pc *PauseController, seq *uint64) (int64, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, 0, err
@@ -113,9 +136,7 @@ func scanFileOnce(path string, re *regexp.Regexp, out chan<- Event) (int64, int6
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-
-	// 긴 라인 대비
-	const maxCapacity = 1024 * 1024 * 8 // 8MB
+	const maxCapacity = 1024 * 1024 * 8
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, maxCapacity)
 
@@ -123,13 +144,17 @@ func scanFileOnce(path string, re *regexp.Regexp, out chan<- Event) (int64, int6
 	var matches int64
 
 	for scanner.Scan() {
+		pc.WaitIfPaused()
+
 		lines++
 		txt := scanner.Text()
 		if re.MatchString(txt) {
 			matches++
-			out <- MatchLine{File: path, Line: txt}
+			id := atomic.AddUint64(seq, 1)
+			out <- MatchLine{Seq: id, File: path, Line: txt}
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		return lines, matches, err
 	}
