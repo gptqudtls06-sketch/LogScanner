@@ -49,17 +49,19 @@ go build -o logscanner ./cmd/logscanner/main.go
 1. 기본 실행 (특정 키워드 검색)
 Bash
 
-./logscanner -path="./logs/*.log" -keyword="ERROR"
+    ./logscanner -path="./logs/*.log" -keyword="ERROR"
+![alt text](image-1.png)
 
 2. 고성능 모드 (병렬 워커 수 지정)
 Bash
 
-./logscanner -path="./logs/*.log" -keyword="WARN|CRITICAL" -concurrent=10
-
+    ./logscanner -path="./logs/*.log" -keyword="WARN|CRITICAL" -concurrent=10
+![alt text](image.png)
 3. 대시보드 출력 개수 조절
 Bash
 
-./logscanner -path="./logs/*.log" -keyword="FATAL" -tail=50
+    ./logscanner -path="./logs/*.log" -keyword="FATAL" -tail=50
+![alt text](image-2.png)
 
 명령어 옵션 (Flags)
 옵션	설명	기본값
@@ -71,3 +73,4 @@ Bash
 👨‍💻 개발 의도 (Intern Appeal)
 
     "저는 대용량 데이터를 빠르고 안전하게 처리할 수 있는 Go의 동시성 모델을 깊이 이해하고 있습니다. 단순히 기능을 구현하는 것을 넘어, Worker Pool 패턴을 통한 리소스 최적화와 Channel을 통한 데이터 무결성 보장에 집중했습니다. 특히 시스템의 **Ceiling(성능 한계)**까지 활용하면서도 안정성을 유지하는 백엔드 설계를 목표로 프로젝트를 진행했습니다."
+    
