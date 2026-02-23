@@ -3,7 +3,9 @@
     병렬 처리 기술을 활용한 고성능 TUI 로그 분석 대시보드
 
 Go-LogScanner는 다수의 로그 파일을 고루틴 워커풀(Worker Pool)로 병렬 스캔하고, 정규식 기반의 패턴 매칭 결과를 실시간 TUI(Terminal User Interface) 화면으로 제공하는 CLI 도구입니다. 대용량 파일도 안정적으로 처리할 수 있는 스트리밍 설계가 특징입니다.
+
 ✨ 핵심 기능 (Key Features)
+
 🚀 1. 고성능 병렬 스캔 (Worker Pool)
 
     효율적인 리소스 활용: 지정한 워커 수(-concurrent)만큼 고루틴을 생성하여 여러 로그 파일을 동시에 스캔합니다.
